@@ -7,10 +7,9 @@ import org.springframework.data.relational.core.mapping.Table;
 public record ShortUrl(
     @Id Long id,
     String code,
-    String originalUrl,
-    String createdAt
+    String originalUrl
 ) {
     public ShortUrl(String code, String originalUrl) {
-        this(null, code, originalUrl, null);
+        this(null, code, originalUrl);
     }
 }
