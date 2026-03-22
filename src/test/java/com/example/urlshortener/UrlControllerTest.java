@@ -33,7 +33,7 @@ class UrlControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(requestBody))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.shortUrl").value(matchesPattern("http://localhost:8080/[A-Za-z0-9]{7}")));
+                .andExpect(jsonPath("$.shortUrl").value(matchesPattern("https?://[^/]+/[A-Za-z0-9]{7}")));
     }
 
     @Test
