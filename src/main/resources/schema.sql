@@ -1,7 +1,6 @@
--- schema.sql
 CREATE TABLE IF NOT EXISTS short_urls (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  code TEXT NOT NULL UNIQUE,
+  id        BIGSERIAL PRIMARY KEY,
+  code      TEXT NOT NULL UNIQUE,
   original_url TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
