@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import static com.example.urlshortener.TestHelper.uniqueTestIp;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,7 +32,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shortUrl").value(matchesPattern("https?://[^/]+/[A-Za-z0-9]{7}")));
     }
@@ -46,12 +48,14 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void testRedirectToOriginalUrl() throws Exception {
+        String testIp = uniqueTestIp();
         // First create a short URL
         String requestBody = """
             {
@@ -61,7 +65,8 @@ class UrlControllerTest {
 
         MvcResult result = mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", testIp))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").exists())
                 .andReturn();
@@ -71,14 +76,16 @@ class UrlControllerTest {
         String shortCode = response.split("\"code\":\"")[1].split("\"")[0];
 
         // Then test the redirect
-        mockMvc.perform(get("/" + shortCode))
+        mockMvc.perform(get("/" + shortCode)
+                .header("X-Forwarded-For", testIp))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("https://www.google.com"));
     }
 
     @Test
     void testRedirectWithNonExistentCode() throws Exception {
-        mockMvc.perform(get("/INVALID"))
+        mockMvc.perform(get("/INVALID")
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isNotFound());
     }
 
@@ -93,7 +100,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shortUrl").value(containsString("/mylink")))
                 .andExpect(jsonPath("$.code").value("mylink"));
@@ -101,6 +109,7 @@ class UrlControllerTest {
 
     @Test
     void testCustomCodeConflict() throws Exception {
+        String testIp = uniqueTestIp();
         // First, create a short URL with custom code
         String requestBody = """
             {
@@ -111,7 +120,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", testIp))
                 .andExpect(status().isOk());
 
         // Try to create another URL with the same custom code
@@ -124,7 +134,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(duplicateRequest))
+                .content(duplicateRequest)
+                .header("X-Forwarded-For", testIp))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value(containsString("already exists")));
     }
@@ -140,7 +151,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("between 3 and 20")));
     }
@@ -156,7 +168,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("between 3 and 20")));
     }
@@ -172,7 +185,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("alphanumeric")));
     }
@@ -188,13 +202,15 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("reserved")));
     }
 
     @Test
     void testRedirectWithCustomCode() throws Exception {
+        String testIp = uniqueTestIp();
         // Create a short URL with custom code
         String requestBody = """
             {
@@ -205,11 +221,13 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", testIp))
                 .andExpect(status().isOk());
 
         // Test the redirect works with custom code
-        mockMvc.perform(get("/vibe"))
+        mockMvc.perform(get("/vibe")
+                .header("X-Forwarded-For", testIp))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("https://www.vibecoding.com"));
     }
@@ -226,7 +244,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").exists());
     }
@@ -241,7 +260,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
     }
@@ -256,7 +276,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Invalid URL format")));
     }
@@ -271,7 +292,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
     }
@@ -286,7 +308,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
     }
@@ -301,7 +324,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("must include a scheme")));
     }
@@ -316,7 +340,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -331,7 +356,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Invalid URL format")));
     }
@@ -346,7 +372,8 @@ class UrlControllerTest {
 
         mockMvc.perform(post("/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
     }
