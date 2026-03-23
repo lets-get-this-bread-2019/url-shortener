@@ -213,4 +213,141 @@ class UrlControllerTest {
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("https://www.vibecoding.com"));
     }
+
+    // Security tests for URL validation
+
+    @Test
+    void testShortenUrlWithHttpScheme() throws Exception {
+        String requestBody = """
+            {
+              "url": "http://www.example.com"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").exists());
+    }
+
+    @Test
+    void testRejectJavascriptScheme() throws Exception {
+        String requestBody = """
+            {
+              "url": "javascript:alert('XSS')"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
+    }
+
+    @Test
+    void testRejectDataScheme() throws Exception {
+        String requestBody = """
+            {
+              "url": "data:text/html,<script>alert('XSS')</script>"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Invalid URL format")));
+    }
+
+    @Test
+    void testRejectFileScheme() throws Exception {
+        String requestBody = """
+            {
+              "url": "file:///etc/passwd"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
+    }
+
+    @Test
+    void testRejectFtpScheme() throws Exception {
+        String requestBody = """
+            {
+              "url": "ftp://ftp.example.com/file.txt"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
+    }
+
+    @Test
+    void testRejectUrlWithoutScheme() throws Exception {
+        String requestBody = """
+            {
+              "url": "www.example.com"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("must include a scheme")));
+    }
+
+    @Test
+    void testRejectMalformedUrl() throws Exception {
+        String requestBody = """
+            {
+              "url": "ht!tp://invalid url with spaces"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void testRejectUrlWithoutHost() throws Exception {
+        String requestBody = """
+            {
+              "url": "https://"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Invalid URL format")));
+    }
+
+    @Test
+    void testRejectUrlSchemeCaseInsensitive() throws Exception {
+        String requestBody = """
+            {
+              "url": "JAVASCRIPT:alert('XSS')"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
+    }
 }

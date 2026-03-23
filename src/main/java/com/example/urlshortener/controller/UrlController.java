@@ -45,6 +45,8 @@ public class UrlController {
             String shortUrlString = scheme + "://" + host + portSuffix + "/" + shortUrl.code();
 
             return ResponseEntity.ok(Map.of("shortUrl", shortUrlString, "code", shortUrl.code()));
+        } catch (UrlService.InvalidUrlException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (UrlService.InvalidCodeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (UrlService.CodeAlreadyExistsException e) {

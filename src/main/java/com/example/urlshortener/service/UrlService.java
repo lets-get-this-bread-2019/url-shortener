@@ -4,6 +4,8 @@ import com.example.urlshortener.model.ShortUrl;
 import com.example.urlshortener.repository.UrlRepository;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.SecureRandom;
 import java.util.Optional;
 import java.util.Set;
@@ -32,6 +34,9 @@ public class UrlService {
     }
 
     public ShortUrl createShortUrl(String originalUrl, String customCode) {
+        // Security: Validate URL scheme to prevent open redirect attacks
+        validateUrl(originalUrl);
+
         if (customCode != null && !customCode.isBlank()) {
             // Validate custom code
             validateCustomCode(customCode);
@@ -57,6 +62,43 @@ public class UrlService {
 
     public Optional<ShortUrl> findByCode(String code) {
         return urlRepository.findByCode(code);
+    }
+
+    /**
+     * Validates the URL scheme to prevent open redirect and XSS attacks.
+     * Only allows http and https schemes.
+     *
+     * @param url The URL to validate
+     * @throws InvalidUrlException if the URL has an invalid or dangerous scheme
+     */
+    private void validateUrl(String url) {
+        if (url == null || url.isBlank()) {
+            throw new InvalidUrlException("URL cannot be empty");
+        }
+
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme();
+
+            // Scheme is required
+            if (scheme == null || scheme.isBlank()) {
+                throw new InvalidUrlException("URL must include a scheme (http:// or https://)");
+            }
+
+            // Only allow http and https schemes
+            String lowerScheme = scheme.toLowerCase();
+            if (!lowerScheme.equals("http") && !lowerScheme.equals("https")) {
+                throw new InvalidUrlException("Only http and https URLs are allowed. Scheme '" + scheme + "' is not permitted");
+            }
+
+            // Ensure the URL has a host
+            if (uri.getHost() == null || uri.getHost().isBlank()) {
+                throw new InvalidUrlException("URL must include a valid host");
+            }
+
+        } catch (URISyntaxException e) {
+            throw new InvalidUrlException("Invalid URL format: " + e.getMessage());
+        }
     }
 
     private void validateCustomCode(String code) {
@@ -93,6 +135,12 @@ public class UrlService {
 
     public static class CodeAlreadyExistsException extends RuntimeException {
         public CodeAlreadyExistsException(String message) {
+            super(message);
+        }
+    }
+
+    public static class InvalidUrlException extends RuntimeException {
+        public InvalidUrlException(String message) {
             super(message);
         }
     }
