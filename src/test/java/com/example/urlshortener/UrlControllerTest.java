@@ -377,4 +377,102 @@ class UrlControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(containsString("Only http and https URLs are allowed")));
     }
+
+    // Expiration tests
+
+    @Test
+    void testShortenUrlWithTtl() throws Exception {
+        String requestBody = """
+            {
+              "url": "https://www.example.com",
+              "ttlSeconds": 3600
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").exists())
+                .andExpect(jsonPath("$.shortUrl").exists());
+    }
+
+    @Test
+    void testShortenUrlWithoutTtlNeverExpires() throws Exception {
+        String testIp = uniqueTestIp();
+        String requestBody = """
+            {
+              "url": "https://www.example.com"
+            }
+            """;
+
+        MvcResult result = mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody)
+                .header("X-Forwarded-For", testIp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").exists())
+                .andReturn();
+
+        String response = result.getResponse().getContentAsString();
+        String shortCode = response.split("\"code\":\"")[1].split("\"")[0];
+
+        // Verify the redirect works (no expiration)
+        mockMvc.perform(get("/" + shortCode)
+                .header("X-Forwarded-For", testIp))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("https://www.example.com"));
+    }
+
+    @Test
+    void testShortenUrlWithNegativeTtlRejects() throws Exception {
+        String requestBody = """
+            {
+              "url": "https://www.example.com",
+              "ttlSeconds": -100
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("must be positive")));
+    }
+
+    @Test
+    void testShortenUrlWithZeroTtlRejects() throws Exception {
+        String requestBody = """
+            {
+              "url": "https://www.example.com",
+              "ttlSeconds": 0
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("must be positive")));
+    }
+
+    @Test
+    void testShortenUrlWithInvalidTtlTypeRejects() throws Exception {
+        String requestBody = """
+            {
+              "url": "https://www.example.com",
+              "ttlSeconds": "not-a-number"
+            }
+            """;
+
+        mockMvc.perform(post("/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody)
+                .header("X-Forwarded-For", uniqueTestIp()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("must be a number")));
+    }
 }

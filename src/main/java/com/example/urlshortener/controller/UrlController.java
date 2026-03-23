@@ -21,17 +21,31 @@ public class UrlController {
 
     @PostMapping("/shorten")
     public ResponseEntity<Map<String, String>> shortenUrl(
-            @RequestBody Map<String, String> request,
+            @RequestBody Map<String, Object> request,
             HttpServletRequest httpRequest) {
-        String url = request.get("url");
+        String url = (String) request.get("url");
         if (url == null || url.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "URL is required"));
         }
 
-        String customCode = request.get("customCode");
+        String customCode = (String) request.get("customCode");
+
+        // Parse ttlSeconds if provided
+        Long ttlSeconds = null;
+        if (request.containsKey("ttlSeconds")) {
+            Object ttlValue = request.get("ttlSeconds");
+            if (ttlValue instanceof Number) {
+                ttlSeconds = ((Number) ttlValue).longValue();
+                if (ttlSeconds <= 0) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "ttlSeconds must be positive"));
+                }
+            } else {
+                return ResponseEntity.badRequest().body(Map.of("error", "ttlSeconds must be a number"));
+            }
+        }
 
         try {
-            ShortUrl shortUrl = urlService.createShortUrl(url, customCode);
+            ShortUrl shortUrl = urlService.createShortUrl(url, customCode, ttlSeconds);
 
             // Build base URL from the incoming request so it works on any host
             String scheme = httpRequest.getHeader("X-Forwarded-Proto") != null
@@ -58,6 +72,9 @@ public class UrlController {
     public RedirectView redirectToOriginal(@PathVariable String code) {
         return urlService.findByCode(code)
             .map(shortUrl -> {
+                if (shortUrl.isExpired()) {
+                    throw new UrlExpiredException("Short URL has expired: " + code);
+                }
                 RedirectView redirectView = new RedirectView(shortUrl.originalUrl());
                 redirectView.setStatusCode(HttpStatus.FOUND); // 302
                 return redirectView;
@@ -68,6 +85,13 @@ public class UrlController {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     static class UrlNotFoundException extends RuntimeException {
         public UrlNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    static class UrlExpiredException extends RuntimeException {
+        public UrlExpiredException(String message) {
             super(message);
         }
     }

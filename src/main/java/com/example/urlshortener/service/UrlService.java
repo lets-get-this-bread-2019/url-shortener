@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 
@@ -30,12 +31,22 @@ public class UrlService {
     }
 
     public ShortUrl createShortUrl(String originalUrl) {
-        return createShortUrl(originalUrl, null);
+        return createShortUrl(originalUrl, null, null);
     }
 
     public ShortUrl createShortUrl(String originalUrl, String customCode) {
+        return createShortUrl(originalUrl, customCode, null);
+    }
+
+    public ShortUrl createShortUrl(String originalUrl, String customCode, Long ttlSeconds) {
         // Security: Validate URL scheme to prevent open redirect attacks
         validateUrl(originalUrl);
+
+        // Calculate expiration time if TTL is provided
+        Instant expiresAt = null;
+        if (ttlSeconds != null && ttlSeconds > 0) {
+            expiresAt = Instant.now().plusSeconds(ttlSeconds);
+        }
 
         if (customCode != null && !customCode.isBlank()) {
             // Validate custom code
@@ -47,13 +58,13 @@ public class UrlService {
             }
 
             // Use custom code
-            return urlRepository.save(new ShortUrl(customCode, originalUrl));
+            return urlRepository.save(new ShortUrl(customCode, originalUrl, expiresAt));
         } else {
             // Generate a unique random code
             for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
                 String code = generateRandomCode();
                 if (urlRepository.findByCode(code).isEmpty()) {
-                    return urlRepository.save(new ShortUrl(code, originalUrl));
+                    return urlRepository.save(new ShortUrl(code, originalUrl, expiresAt));
                 }
             }
             throw new RuntimeException("Failed to generate a unique short code after " + MAX_ATTEMPTS + " attempts");
