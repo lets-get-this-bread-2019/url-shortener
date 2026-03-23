@@ -641,51 +641,62 @@ Location: https://example.com
 - Auto-generated codes are random (not sequential)
 - Hard to guess other users' URLs
 
-### Known Vulnerabilities (Future Fixes)
+### Security Features Implemented
 
-**1. ❌ Open Redirect**
-- **Issue**: Accepts any URL (including malicious ones)
-- **Fix**: Validate URL scheme (allow only `http://`, `https://`)
-- **Mitigation**: Warn users about shortened URLs
+**1. ✅ Open Redirect Protection**
+- **Implementation**: URL scheme validation in `UrlService.validateUrl()`
+- **Allows**: Only `http://` and `https://` schemes
+- **Commit**: `ca5e744` (2026-03-22)
 
-**2. ❌ No Rate Limiting**
-- **Issue**: Attackers can create unlimited URLs
-- **Fix**: Add rate limiting (e.g., 10 URLs/min per IP)
-- **Mitigation**: Monitor usage patterns
+**2. ✅ Rate Limiting**
+- **Implementation**: IP-based rate limiting using Bucket4j (`RateLimitService`)
+- **Limits**: 10 requests/min for URL creation, 100 requests/min for redirects
+- **Enforced**: Via `RateLimitInterceptor` on both endpoints
+- **Commit**: `efb530b` (2026-03-22)
 
-**3. ❌ No URL Expiration**
-- **Issue**: URLs live forever (no cleanup)
-- **Fix**: Add optional TTL (e.g., expire after 30 days)
-- **Mitigation**: Manual DB cleanup if needed
+**3. ✅ URL Expiration with TTL**
+- **Implementation**: Optional `expires_at` column, scheduled cleanup job
+- **Features**: Custom TTL per URL, automatic expired URL deletion
+- **Service**: `UrlCleanupService` runs cleanup every 5 minutes
+- **Commit**: `af59a15` (2026-03-22)
 
-**4. ❌ No HTTPS Enforcement**
-- **Issue**: Accepts `http://` in URL (potential security risk)
-- **Fix**: Redirect all traffic to HTTPS, encourage HTTPS URLs
-- **Mitigation**: Render provides HTTPS by default
+**4. ✅ SQL Injection Prevention**
+- **Implementation**: Spring Data JDBC uses parameterized queries
+- **Status**: Safe by default, no raw SQL used
 
-**5. ❌ SQL Injection (Mitigated)**
-- **Issue**: Potential SQL injection if not parameterized
-- **Fix**: Spring Data JDBC uses parameterized queries (safe)
-- **Status**: ✅ Already mitigated
+### Remaining Security Considerations
+
+**1. HTTPS Enforcement**
+- **Current**: Accepts both `http://` and `https://` in shortened URLs
+- **Mitigation**: Render platform provides HTTPS by default for the service
+- **Future**: Could enforce HTTPS-only for submitted URLs
 
 ---
 
 ## Future Enhancements
 
+### Completed ✅
+
+1. **URL Expiration** (commit `af59a15`)
+   - ✅ Added `expires_at` column
+   - ✅ Scheduled job to delete expired URLs (`UrlCleanupService`)
+   - ✅ API accepts optional `ttl` parameter
+
+2. **Rate Limiting** (commit `efb530b`)
+   - ✅ IP-based rate limiting using Bucket4j
+   - ✅ Configurable limits via `application.properties`
+   - ✅ Separate limits for shorten (10/min) and redirect (100/min)
+
+3. **Open Redirect Protection** (commit `ca5e744`)
+   - ✅ URL scheme validation (http/https only)
+   - ✅ Prevents malicious redirects
+
 ### High Priority
 
-1. **URL Expiration**
-   - Add `expires_at` column
-   - Scheduled job to delete expired URLs
-   - API to set custom TTL
-
-2. **Click Analytics**
+1. **Click Analytics**
    - Track click count, last accessed, referrer
    - Add `clicks` table (url_id, timestamp, ip, user_agent)
-
-3. **Rate Limiting**
-   - Limit URL creation per IP/user
-   - Use Spring Boot Rate Limiter or Redis
+   - Provide analytics dashboard endpoint
 
 ### Medium Priority
 
