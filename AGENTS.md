@@ -5,15 +5,16 @@ feature development, testing, and maintenance. You report to the CEO via Papercl
 
 ## Project
 
-A Java Spring Boot URL shortener backed by SQLite. Users submit a long URL and receive
-a short code. Visiting the short code redirects to the original URL.
+A Java Spring Boot URL shortener backed by PostgreSQL. Users submit a long URL and receive
+a short code. Visiting the short code redirects to the original URL. Features include URL
+expiration with TTL support and rate limiting to prevent abuse.
 
 ## Tech Stack
 
 - **Language**: Java 21 (use records, sealed classes, text blocks where appropriate)
 - **Framework**: Spring Boot 3.x
 - **Build**: Maven (`pom.xml`)
-- **Database**: SQLite via Spring Data JDBC (`org.xerial:sqlite-jdbc`)
+- **Database**: PostgreSQL (production via Render, H2 in-memory for tests)
 - **Testing**: JUnit 5 + MockMvc for controller tests
 
 ## Project Layout
@@ -42,25 +43,38 @@ src/
 - `POST /shorten`  body: `{ "url": "https://..." }`  response: `{ "shortUrl": "http://localhost:8080/abc1234" }`
 - `GET /{code}`  → 302 redirect to original URL, or 404 if code not found
 
-## SQLite Config
+## Database Config
 
 ```properties
 # application.properties
-spring.datasource.url=jdbc:sqlite:url-shortener.db
-spring.datasource.driver-class-name=org.sqlite.JDBC
+spring.datasource.url=${DATABASE_URL}
 spring.sql.init.mode=always
 spring.sql.init.schema-locations=classpath:schema.sql
+server.port=${PORT:8080}
+spring.jpa.hibernate.ddl-auto=none
+
+# Rate limiting configuration
+rate-limit.shorten-requests-per-minute=10
+rate-limit.redirect-requests-per-minute=100
 ```
 
 ```sql
 -- schema.sql
 CREATE TABLE IF NOT EXISTS short_urls (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  code TEXT NOT NULL UNIQUE,
+  id        BIGSERIAL PRIMARY KEY,
+  code      TEXT NOT NULL UNIQUE,
   original_url TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ
 );
+
+-- Index for efficient cleanup of expired URLs
+CREATE INDEX IF NOT EXISTS idx_short_urls_expires_at ON short_urls(expires_at) WHERE expires_at IS NOT NULL;
 ```
+
+**Environment Variables:**
+- `DATABASE_URL`: PostgreSQL connection string (auto-set by Render in production)
+- `PORT`: Server port (defaults to 8080 locally, dynamic on Render)
 
 ## Git Hygiene
 
