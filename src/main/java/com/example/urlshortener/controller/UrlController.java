@@ -1,6 +1,7 @@
 package com.example.urlshortener.controller;
 
 import com.example.urlshortener.model.ShortUrl;
+import com.example.urlshortener.service.AnalyticsService;
 import com.example.urlshortener.service.UrlService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -8,15 +9,19 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
 
+import java.time.LocalDate;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 public class UrlController {
 
     private final UrlService urlService;
+    private final AnalyticsService analyticsService;
 
-    public UrlController(UrlService urlService) {
+    public UrlController(UrlService urlService, AnalyticsService analyticsService) {
         this.urlService = urlService;
+        this.analyticsService = analyticsService;
     }
 
     @PostMapping("/shorten")
@@ -69,17 +74,59 @@ public class UrlController {
     }
 
     @GetMapping("/{code}")
-    public RedirectView redirectToOriginal(@PathVariable String code) {
+    public RedirectView redirectToOriginal(
+            @PathVariable String code,
+            HttpServletRequest request) {
         return urlService.findByCode(code)
             .map(shortUrl -> {
                 if (shortUrl.isExpired()) {
                     throw new UrlExpiredException("Short URL has expired: " + code);
                 }
+
+                // Track click analytics
+                String ipAddress = getClientIpAddress(request);
+                String userAgent = request.getHeader("User-Agent");
+                String referrer = request.getHeader("Referer");
+                analyticsService.recordClick(shortUrl.id(), ipAddress, userAgent, referrer);
+
                 RedirectView redirectView = new RedirectView(shortUrl.originalUrl());
                 redirectView.setStatusCode(HttpStatus.FOUND); // 302
                 return redirectView;
             })
             .orElseThrow(() -> new UrlNotFoundException("Short URL not found: " + code));
+    }
+
+    @GetMapping("/analytics/{code}")
+    public ResponseEntity<?> getAnalytics(@PathVariable String code) {
+        return analyticsService.getAnalytics(code)
+            .map(analytics -> {
+                Map<String, Object> response = Map.of(
+                    "code", analytics.code(),
+                    "originalUrl", analytics.originalUrl(),
+                    "totalClicks", analytics.totalClicks(),
+                    "uniqueIps", analytics.uniqueIps(),
+                    "clicksByDate", analytics.clicksByDate().entrySet().stream()
+                        .collect(Collectors.toMap(
+                            e -> e.getKey().toString(),
+                            Map.Entry::getValue
+                        )),
+                    "topReferrers", analytics.topReferrers()
+                );
+                return ResponseEntity.ok(response);
+            })
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Extracts the client's IP address, handling proxy headers.
+     */
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            // Take the first IP in the chain (the original client)
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @ResponseStatus(HttpStatus.NOT_FOUND)
